@@ -37,14 +37,16 @@ class Account(models.Model):
 
 
 
-class Transaction(models.Model):
+class TransactionDetails(models.Model):
     transaction_id = models.AutoField(primary_key=True)
-    account = models.ForeignKey(Account, on_delete=models.CASCADE)
-    transaction_type = models.CharField(max_length=100, null=False, blank=False)
+    from_account_id = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='from_account')
+    to_account_id = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='to_account')
+    from_user_id = models.ForeignKey(User, on_delete=models.CASCADE, related_name='from_user')
+    to_user_id = models.ForeignKey(User, on_delete=models.CASCADE, related_name='to_user')
+    from_account_number = models.CharField(max_length=6, null=False, blank=False)
+    to_account_number = models.CharField(max_length=6, null=False, blank=False)
     amount = models.DecimalField(max_digits=10, decimal_places=2, null=False, blank=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return self.transaction_type
 
