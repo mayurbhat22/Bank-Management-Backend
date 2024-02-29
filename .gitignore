@@ -11,3 +11,12 @@ bank_management_backend/app/migrations/__pycache__/0002_alter_user_address_alter
 bank_management_backend/app/migrations/__pycache__/0003_remove_user_address_remove_user_city_and_more.cpython-311.pyc
 bank_management_backend/bank_management_backend/__pycache__/settings.cpython-311.pyc
 bank_management_backend/bank_management_backend/__pycache__/urls.cpython-311.pyc
+bank_management_backend/app/__pycache__/models.cpython-311.pyc
+bank_management_backend/app/__pycache__/models.cpython-311.pyc
+bank_management_backend/app/__pycache__/serializers.cpython-311.pyc
+bank_management_backend/app/__pycache__/urls.cpython-311.pyc
+bank_management_backend/app/__pycache__/views.cpython-311.pyc
+bank_management_backend/app/migrations/0004_account_transaction.py
+bank_management_backend/app/migrations/__pycache__/0004_account_transaction.cpython-311.pyc
+bank_management_backend/app/migrations/0005_alter_account_user.py
+bank_management_backend/app/migrations/__pycache__/0005_alter_account_user.cpython-311.pyc
