@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Account, Transaction
+from .models import User, Account, TransactionDetails
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -20,8 +20,6 @@ class UserSerializer(serializers.ModelSerializer):
             }
         return None
 
-
-    
 class CreateUserSerializer(serializers.ModelSerializer):
     class Meta:
         print("CreateUserSerializer")
@@ -44,7 +42,7 @@ class CreateAccountSerializer(serializers.ModelSerializer):
         fields = ('user', 'account_number', 'account_type', 'balance')
 
 class LoginUserSerializer(serializers.Serializer):
-        #Check if the user exists
+        # Check if the user exists
         user_name = serializers.CharField()
         password = serializers.CharField()
         def validate(self, data):
@@ -57,3 +55,8 @@ class LoginUserSerializer(serializers.Serializer):
             if user.first().password != data["password"]:
                 raise serializers.ValidationError("Password is incorrect")
             return data
+
+class TransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransactionDetails
+        fields = ('transaction_id', 'from_account_id', 'to_account_id', 'from_user_id', 'to_user_id', 'from_account_number', 'to_account_number', 'amount', 'created_at', 'updated_at')

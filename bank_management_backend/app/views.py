@@ -4,8 +4,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view
-from .models import User
-from .serializers import UserSerializer, CreateUserSerializer, LoginUserSerializer, CreateAccountSerializer
+from .models import User, Account, TransactionDetails
+from .serializers import UserSerializer, CreateUserSerializer, LoginUserSerializer, CreateAccountSerializer, TransactionSerializer
 # Create your views here.
 
 class UserView(generics.ListCreateAPIView):
@@ -52,11 +52,8 @@ class LoginUserView(APIView):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             # If validation passes, retrieve the user.
-            user = User.objects.get(user_name=serializer.validated_data["user_name"])
-            user_role = user.user_role
-            # Implement session login logic.
-            
-            return Response({"message": "Login successful"}, status=status.HTTP_200_OK)
+            user = User.objects.get(user_name=serializer.validated_data["user_name"])      
+            return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
         else:
             print("Invalid data", serializer.errors)
             # If validation fails, return the error messages.
@@ -81,6 +78,44 @@ class DeleteUserView(generics.DestroyAPIView):
         print("Destroying", instance)
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+class TransferMoneyView(APIView):
+    serializer_class = TransactionSerializer
+
+    def post(self, request):
+        from_user_id = int(request.data["from_user"])
+        from_account_number = request.data["from_account"]
+        to_account_number = request.data["to_account"]
+        to_user_querySet = Account.objects.filter(account_number=to_account_number).first()
+
+        to_user_id = 0
+        if to_user_querySet:
+            to_user_id = to_user_querySet.user_id
+
+        from_account_querySet = Account.objects.filter(account_number=from_account_number).first()
+        from_account_id = 0
+        if from_account_querySet:
+            from_account_id = from_account_querySet.account_id
+
+        to_account_querySet = Account.objects.filter(account_number=to_account_number).first()
+        to_account_id = 0
+        if to_account_querySet:
+            to_account_id = to_account_querySet.account_id
+        amount = request.data["amount"]
+
+        serializer = self.serializer_class(data={"from_user_id": from_user_id, "from_account_id": from_account_id, 
+                                                 "to_account_id": to_account_id, "to_user_id": to_user_id, "from_account_number": from_account_number, 
+                                                 "to_account_number": to_account_number, "amount": amount})
+        if serializer.is_valid():
+            # If validation passes, retrieve the user.
+            print("Validated", serializer.validated_data)
+            serializer.save()
+            print("Transaction saved")
+            return Response({"message": "Transaction successful"}, status=status.HTTP_200_OK)
+        else:
+            print("Invalid dataaa", serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        pass
 
 # This will return a list of books
 @api_view(["GET"])
