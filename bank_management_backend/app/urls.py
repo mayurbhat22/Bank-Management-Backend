@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import UserView, CreateUserView, LoginUserView, AccountView, DeleteUserView, TransferMoneyView
+from .views import UserView, CreateUserView, LoginUserView, AccountView, DeleteUserView, TransferMoneyView, TransactionDetailsView
 from .views import book
 
 urlpatterns = [
@@ -9,4 +9,5 @@ urlpatterns = [
     path("internaluser/viewuserprofiles", AccountView.as_view()),
     path('internaluser/deleteaccount/<int:pk>/', DeleteUserView.as_view()),
     path("externaluser/transferfunds", TransferMoneyView.as_view()),
+    path("externaluser/transactionhistory", TransactionDetailsView.as_view())
 ]

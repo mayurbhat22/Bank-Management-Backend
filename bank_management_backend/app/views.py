@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view
 from .models import User, Account, TransactionDetails
-from .serializers import UserSerializer, CreateUserSerializer, LoginUserSerializer, CreateAccountSerializer, TransactionSerializer
+from .serializers import UserSerializer, CreateUserSerializer, LoginUserSerializer, CreateAccountSerializer, TransferMoneySerializer
 # Create your views here.
 
 class UserView(generics.ListCreateAPIView):
@@ -33,7 +33,7 @@ class CreateUserView(APIView):
             user.save()
             print("User saved")
             print("User_Data", UserSerializer(user).data)
-            serializer_account = self.serializer_account_class(data={"user": user.user_id, "account_type": "Savings", "balance": 0})
+            serializer_account = self.serializer_account_class(data={"user": user.user_id, "account_type": "Savings", "balance": 100})
             if serializer_account.is_valid():
                 account = serializer_account.save()
                 print("Account saved")
@@ -80,7 +80,7 @@ class DeleteUserView(generics.DestroyAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 class TransferMoneyView(APIView):
-    serializer_class = TransactionSerializer
+    serializer_class = TransferMoneySerializer
 
     def post(self, request):
         from_user_id = int(request.data["from_user"])
@@ -105,17 +105,48 @@ class TransferMoneyView(APIView):
 
         serializer = self.serializer_class(data={"from_user_id": from_user_id, "from_account_id": from_account_id, 
                                                  "to_account_id": to_account_id, "to_user_id": to_user_id, "from_account_number": from_account_number, 
-                                                 "to_account_number": to_account_number, "amount": amount})
+                                                 "to_account_number": to_account_number, "amount": amount, "transaction_type": "transfer"})
         if serializer.is_valid():
             # If validation passes, retrieve the user.
             print("Validated", serializer.validated_data)
+
+            if from_account_querySet.balance < int(amount):
+                return Response({"message": "Insufficient balance"}, status=status.HTTP_400_BAD_REQUEST)
             serializer.save()
+            # Update balance
+            from_account_querySet.balance = from_account_querySet.balance - int(amount)
+            from_account_querySet.save()
+            to_account_querySet.balance = to_account_querySet.balance + int(amount)
+            to_account_querySet.save()
             print("Transaction saved")
             return Response({"message": "Transaction successful"}, status=status.HTTP_200_OK)
         else:
             print("Invalid dataaa", serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         pass
+
+class TransactionDetailsView(generics.ListCreateAPIView):
+    queryset = TransactionDetails.objects.all()
+    serializer_class = TransferMoneySerializer
+
+    # Filter transaction related to from-user
+    def list(self, request, *args, **kwargs):
+        from_user_id = request.query_params.get('from_user_id', None)
+        if from_user_id is not None:
+            queryset = TransactionDetails.objects.filter(from_user_id=from_user_id)
+            serializer = self.get_serializer(queryset, many=True)
+            data = []
+            for transaction in serializer.data:
+                data.append(transaction)
+            queryset = TransactionDetails.objects.filter(to_user_id=from_user_id)
+            serializer = self.get_serializer(queryset, many=True)
+            for transaction in serializer.data:
+                data.append(transaction)
+            return Response(data, status=status.HTTP_200_OK)
+        else:
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
 # This will return a list of books
 @api_view(["GET"])

@@ -56,7 +56,7 @@ class LoginUserSerializer(serializers.Serializer):
                 raise serializers.ValidationError("Password is incorrect")
             return data
 
-class TransactionSerializer(serializers.ModelSerializer):
+class TransferMoneySerializer(serializers.ModelSerializer):
     class Meta:
         model = TransactionDetails
-        fields = ('transaction_id', 'from_account_id', 'to_account_id', 'from_user_id', 'to_user_id', 'from_account_number', 'to_account_number', 'amount', 'created_at', 'updated_at')
+        fields = ('transaction_id', 'from_account_id', 'to_account_id', 'from_user_id', 'to_user_id', 'from_account_number', 'to_account_number', 'amount', 'created_at', 'updated_at', 'transaction_type')

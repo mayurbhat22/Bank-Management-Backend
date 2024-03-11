@@ -45,8 +45,9 @@ class TransactionDetails(models.Model):
     to_user_id = models.ForeignKey(User, on_delete=models.CASCADE, related_name='to_user')
     from_account_number = models.CharField(max_length=6, null=False, blank=False)
     to_account_number = models.CharField(max_length=6, null=False, blank=False)
+    transaction_type = models.CharField(max_length=100, null=False, blank=False)
     amount = models.DecimalField(max_digits=10, decimal_places=2, null=False, blank=False)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    updated_at = models.DateTimeField(auto_now=True)   
 
 
