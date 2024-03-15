@@ -1,14 +1,16 @@
 from rest_framework import serializers
 from .models import User, Account, TransactionDetails
-
+from django.contrib.auth.hashers import make_password, check_password
 
 class UserSerializer(serializers.ModelSerializer):
     account = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ('user_id', 'name', 'user_name', 'email', 'user_type', 'user_role', 'created_at', 'account')
-
+        fields = ('user_id', 'name', 'user_name', 'email', 'user_type', 'user_role', 'created_at', 'account', 'password')
+        extra_kwargs = {
+            'password': {'write_only': True}  
+        }
     def get_account(self, obj):
         account = obj.account.first()  
         if account:
@@ -19,13 +21,22 @@ class UserSerializer(serializers.ModelSerializer):
                 'balance': account.balance
             }
         return None
+    
+    def update(self, instance, validated_data):
+        # Check if 'password' is being updated and hash it before setting
+        password = validated_data.pop('password', None)
+        if password:
+            instance.password = make_password(password)
+
+        instance.save()
+        return instance
 
 class CreateUserSerializer(serializers.ModelSerializer):
     class Meta:
         print("CreateUserSerializer")
         model = User
         fields = ('name', 'user_name', 'email', 'password', 'user_type', 'user_role')
-        # extra_kwargs = {'password': {'write_only': True}}
+        extra_kwargs = {'password': {'write_only': True}}
 
     def validate(slf, data):
         # Check if the email is unique
@@ -39,8 +50,19 @@ class CreateUserSerializer(serializers.ModelSerializer):
 class CreateAccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
-        fields = ('user', 'account_number', 'account_type', 'balance')
+        fields = ('user', 'account_number', 'account_type', 'balance', 'account_pin')
+        extra_kwargs = {
+            'account_number': {'write_only': True},
+            'account_pin': {'write_only': True}
+        }
+    def upate(self, instance, validated_data):
+        account_pin = validated_data.pop('account_pin', None)
+        if account_pin:
+            instance.account_pin = account_pin
 
+        instance.save()
+        return instance
+    
 class LoginUserSerializer(serializers.Serializer):
         # Check if the user exists
         user_name = serializers.CharField()
@@ -52,7 +74,9 @@ class LoginUserSerializer(serializers.Serializer):
             if not user.exists():
                 raise serializers.ValidationError("User not founddd")
             #Check if ppassword is correct
-            if user.first().password != data["password"]:
+            # if data["password"] != user.first().password:
+            #     raise serializers.ValidationError("Password is incorrect")
+            if not check_password(data["password"], user.first().password):
                 raise serializers.ValidationError("Password is incorrect")
             return data
 

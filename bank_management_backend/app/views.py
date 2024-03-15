@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view
+from django.shortcuts import get_object_or_404
+from django.http import Http404
 from .models import User, Account, TransactionDetails
 from .serializers import UserSerializer, CreateUserSerializer, LoginUserSerializer, CreateAccountSerializer, TransferMoneySerializer
 # Create your views here.
@@ -86,6 +88,7 @@ class TransferMoneyView(APIView):
         from_user_id = int(request.data["from_user"])
         from_account_number = request.data["from_account"]
         to_account_number = request.data["to_account"]
+        from_account_pin = request.data["account_pin"]
         to_user_querySet = Account.objects.filter(account_number=to_account_number).first()
 
         to_user_id = 0
@@ -96,6 +99,8 @@ class TransferMoneyView(APIView):
         from_account_id = 0
         if from_account_querySet:
             from_account_id = from_account_querySet.account_id
+            if from_account_querySet.account_pin != from_account_pin:
+                return Response({"message": "Invalid account pin"}, status=status.HTTP_400_BAD_REQUEST)
 
         to_account_querySet = Account.objects.filter(account_number=to_account_number).first()
         to_account_id = 0
@@ -148,6 +153,37 @@ class TransactionDetailsView(generics.ListCreateAPIView):
             serializer = self.get_serializer(queryset, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
+class UpdateUserDetailsView(generics.UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+class UpdateAccountPinView(generics.UpdateAPIView):
+    serializer_class = CreateAccountSerializer
+
+    def get_object(self):
+        account_number = self.kwargs.get("account_number")
+        try:
+            return Account.objects.get(account_number=account_number)
+        except Account.DoesNotExist:
+            # You can customize the response as needed
+            raise Http404("No Account matches the given query.")
+
+    def update(self, request, *args, **kwargs):
+        try:
+            return super(UpdateAccountPinView, self).update(request, *args, **kwargs)
+        except Http404 as e:
+            # Custom error handling for not found account
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        
 # This will return a list of books
 @api_view(["GET"])
 def book(request):
