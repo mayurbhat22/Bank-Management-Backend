@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import UserView, CreateUserView, LoginUserView, AccountView, DeleteUserView, TransferMoneyView, TransactionDetailsView, UpdateUserDetailsView, UpdateAccountPinView
+from .views import UserView, CreateUserView, LoginUserView, AccountView, DeleteUserView, TransferMoneyView, TransactionDetailsView, UpdateUserDetailsView, UpdateAccountPinView, SessionUserDetailView
 from .views import book
 
 urlpatterns = [
@@ -12,4 +12,5 @@ urlpatterns = [
     path("externaluser/transactionhistory", TransactionDetailsView.as_view()),
     path("externaluser/updateprofile/<int:pk>", UpdateUserDetailsView.as_view()),
     path("externaluser/setaccountpin/<int:account_number>", UpdateAccountPinView.as_view()),
+    path('session-user-details/', SessionUserDetailView.as_view())
 ]

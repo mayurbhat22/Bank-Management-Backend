@@ -59,9 +59,17 @@ class CreateAccountSerializer(serializers.ModelSerializer):
         account_pin = validated_data.pop('account_pin', None)
         if account_pin:
             instance.account_pin = account_pin
-
+       
         instance.save()
         return instance
+
+class UpdateAccountPinSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Account
+        fields = ('account_pin',)
+        extra_kwargs = {
+            'account_pin': {'write_only': True}
+        }
     
 class LoginUserSerializer(serializers.Serializer):
         # Check if the user exists
