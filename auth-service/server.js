@@ -6,9 +6,18 @@ const dotenv = require("dotenv");
 dotenv.config();
 const app = express();
 const port = process.env.PORT;
+const cors = require("cors");
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// CORS
+app.use(
+  cors({
+    origin: "*",
+    credentials: true,
+  })
+);
 
 // In-memory storage for email verification codes
 const emailVerificationCodes = {};
