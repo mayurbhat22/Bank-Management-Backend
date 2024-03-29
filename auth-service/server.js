@@ -7,6 +7,7 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT;
 const cors = require("cors");
+const qrcode = require("qrcode");
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -21,7 +22,7 @@ app.use(
 
 // In-memory storage for email verification codes
 const emailVerificationCodes = {};
-
+const userSecrets = {};
 // Nodemailer configuration
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -88,7 +89,46 @@ app.post("/verify-otp", (req, res) => {
     return res.status(400).send("Invalid OTP.");
   }
 });
+app.post("/enable-2fa", (req, res) => {
+  const username = req.body.username; // Assuming you have a userId for the user
+  const secret = speakeasy.generateSecret({ length: 20 });
+  userSecrets[username] = secret;
 
+  // Generate QR code
+  qrcode.toDataURL(secret.otpauth_url, (err, dataUrl) => {
+    if (err) {
+      console.error("Error generating QR code:", err);
+      return res.status(500).send("Error generating QR code");
+    }
+    res.json({ secret: secret.base32, qrCode: dataUrl });
+  });
+});
+
+// Route to verify OTP
+app.post("/verify-secret", (req, res) => {
+  const username = req.body.username;
+  const clientSecret = req.body.clientSecret;
+
+  const secret = userSecrets[username];
+  if (!secret) {
+    return res.status(400).send("2FA not enabled for this user");
+  }
+
+  const verified = speakeasy.totp.verify({
+    secret: secret.base32,
+    encoding: "base32",
+    token: clientSecret,
+    window: 1, // Allow for time drift of 1 interval (30 seconds by default)
+  });
+
+  if (verified) {
+    // Clear secret after successful verification
+    delete userSecrets[username];
+    return res.status(200).send("OTP verified successfully");
+  } else {
+    return res.status(400).send("Invalid OTP");
+  }
+});
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
