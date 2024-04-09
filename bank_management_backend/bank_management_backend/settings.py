@@ -79,14 +79,9 @@ WSGI_APPLICATION = "bank_management_backend.wsgi.application"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "darkmaster",
-        "HOST": 'localhost',
-        "PORT": "3306",
-        "USER": 'root',
-        "PASSWORD": "Mayurbhat@22"
-
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
