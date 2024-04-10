@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from .models import User, Account, TransactionDetails
 from django.contrib.auth.hashers import make_password, check_password
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import authenticate
+
 
 class UserSerializer(serializers.ModelSerializer):
     account = serializers.SerializerMethodField()
@@ -75,19 +78,41 @@ class LoginUserSerializer(serializers.Serializer):
         # Check if the user exists
         user_name = serializers.CharField()
         password = serializers.CharField()
+        user_type = serializers.CharField()
+        user_role = serializers.CharField()
         def validate(self, data):
             user = User.objects.filter(
                 user_name=data["user_name"]
             )
             if not user.exists():
-                raise serializers.ValidationError("User not founddd")
-            #Check if ppassword is correct
-            # if data["password"] != user.first().password:
-            #     raise serializers.ValidationError("Password is incorrect")
+                raise serializers.ValidationError("User not found")
+            
             if not check_password(data["password"], user.first().password):
                 raise serializers.ValidationError("Password is incorrect")
+            
+            if not data["user_type"] == user.first().user_type:
+                raise serializers.ValidationError("User type is incorrect")
+            
+            if not data["user_role"] == user.first().user_role:
+                raise serializers.ValidationError("User role is incorrect")
+            
             return data
 
+class UserLoginSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField()
+
+    def validate(self, data):
+        user = authenticate(username=data['username'], password=data['password'])
+        if user and user.is_active:
+            refresh = RefreshToken.for_user(user)
+            return {
+                'user_id': user.user_id,
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        raise serializers.ValidationError("Incorrect Credentials")
+    
 class TransferMoneySerializer(serializers.ModelSerializer):
     class Meta:
         model = TransactionDetails

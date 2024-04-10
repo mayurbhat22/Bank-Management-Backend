@@ -7,9 +7,11 @@ from rest_framework.decorators import api_view
 from django.shortcuts import get_object_or_404
 from django.http import Http404
 from .models import User, Account, TransactionDetails
-from .serializers import UserSerializer, CreateUserSerializer, LoginUserSerializer, CreateAccountSerializer, TransferMoneySerializer, UpdateAccountPinSerializer
+from .serializers import UserSerializer, CreateUserSerializer, LoginUserSerializer, UserLoginSerializer, CreateAccountSerializer, TransferMoneySerializer, UpdateAccountPinSerializer
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth import authenticate, login
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth.hashers import make_password, check_password
 # Create your views here.
 
 class UserView(generics.ListCreateAPIView):
@@ -55,36 +57,34 @@ class LoginUserView(APIView):
 
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
-
         if serializer.is_valid():
             username = serializer.validated_data['user_name']
             password = serializer.validated_data['password']
-            user = User.objects.get(user_name=serializer.validated_data["user_name"])    
+            user_type = serializer.validated_data['user_type']
+            user_role = serializer.validated_data['user_role']
 
-            if user is not None:
+            try:
+                user = User.objects.get(user_name=username)
+                
+                if user and check_password(password, user.password) and user.user_type == user_type and user.user_role == user_role:
+                    refresh = RefreshToken.for_user(user)
+                    access_token = refresh.access_token
 
-                request.session['user_id'] = user.user_id
-                request.session['user_name'] = user.user_name
-                request.session['user_type'] = user.user_type
-                request.session['user_role'] = user.user_role
-                request.session['email'] = user.email
-                request.session['name'] = user.name
-                request.session['account_number'] = user.account.first().account_number
-                request.session['account_type'] = user.account.first().account_type
-                request.session['balance'] = str(user.account.first().balance)
-                response_data = {
-                    "message": "Login successful.",
-                    "user_details": UserSerializer(user).data
-                }
-
-                return Response(response_data, status=status.HTTP_200_OK)
-            else:
-                # Authentication failed
+                    response_data = {
+                        "message": "Login successful.",
+                        "refresh": str(refresh),
+                        "access": str(access_token),
+                        "user_details": UserSerializer(user).data
+                    }
+                    return Response(response_data, status=status.HTTP_200_OK)
+                else:
+                    return Response({"detail": "Invalid username or password."}, status=status.HTTP_401_UNAUTHORIZED)
+            except User.DoesNotExist:
                 return Response({"detail": "Invalid username or password."}, status=status.HTTP_401_UNAUTHORIZED)
         else:
-            # Serializer validation failed
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+    
+    
 class AccountView(generics.ListCreateAPIView):
     queryset = User.objects.prefetch_related('account').all() 
     serializer_class = UserSerializer
@@ -95,13 +95,11 @@ class AccountView(generics.ListCreateAPIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class DeleteUserView(generics.DestroyAPIView):
-    print("DeleteUserView")
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        print("Destroying", instance)
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -210,21 +208,16 @@ class UpdateAccountPinView(generics.UpdateAPIView):
             # Custom error handling for not found account
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         
-class SessionUserDetailView(APIView):
-    def get(self, request):
-        # Fetch user_id from session
-        user_id = request.session.get('user_id')
 
-        if not user_id:
-            return Response({"error": "User not found in session."}, status=status.HTTP_400_BAD_REQUEST)
-
-        user = get_object_or_404(User, pk=user_id)
-        serializer = UserSerializer(user)
-
-        return Response(serializer.data, status=status.HTTP_200_OK)
+class GetAccountPinIsSetView(APIView):
+    def get(self, request, *args, **kwargs):
+        account_number = self.kwargs.get("account_number")
+        account = Account.objects.filter(account_number=account_number).first()
+        if account:
+            if account.account_pin == "0":
+                return Response({"message": "Account pin is not set"}, status=status.HTTP_200_OK)
+            else:
+                return Response({"message": "Account pin is set"}, status=status.HTTP_200_OK)
+        else:
+            return Response({"message": "Account not found"}, status=status.HTTP_404_NOT_FOUND)
            
-# This will return a list of books
-@api_view(["GET"])
-def book(request):
-    books = ["Pro Python", "Fluent Python", "Speaking javascript", "The Go programming language"]
-    return Response(status=status.HTTP_200_OK, data={"data": books})
