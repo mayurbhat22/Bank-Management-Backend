@@ -116,4 +116,10 @@ class UserLoginSerializer(serializers.Serializer):
 class TransferMoneySerializer(serializers.ModelSerializer):
     class Meta:
         model = TransactionDetails
-        fields = ('transaction_id', 'from_account_id', 'to_account_id', 'from_user_id', 'to_user_id', 'from_account_number', 'to_account_number', 'amount', 'created_at', 'updated_at', 'transaction_type')
+        fields = ('transaction_id', 'from_account_id', 'to_account_id', 'from_user_id', 'to_user_id', 'from_account_number', 
+                  'to_account_number', 'amount', 'created_at', 'updated_at', 'transaction_type', 'isAuthoriseRequired')
+    
+    def update(self, instance, validated_data):
+        instance.isAuthoriseRequired = False
+        instance.save()
+        return instance

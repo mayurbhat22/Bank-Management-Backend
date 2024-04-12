@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import UserView, CreateUserView, LoginUserView, AccountView, DeleteUserView, TransferMoneyView, TransactionDetailsView, UpdateUserDetailsView, UpdateAccountPinView, GetAccountPinIsSetView
+from .views import UserView, CreateUserView, LoginUserView, UpdateTransactionDetailsView, AccountView, DeleteUserView, TransferMoneyView, TransactionDetailsView, UpdateUserDetailsView, UpdateAccountPinView, GetAccountPinIsSetView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.urls import path
 
@@ -9,6 +9,7 @@ urlpatterns = [
     path("login", LoginUserView.as_view()),
     path("viewuserprofiles", AccountView.as_view()),
     path('internaluser/deleteaccount/<int:pk>/', DeleteUserView.as_view()),
+    path('internaluser/authorizetransaction/<int:pk>', UpdateTransactionDetailsView.as_view()),
     path("externaluser/transferfunds", TransferMoneyView.as_view()),
     path("externaluser/transactionhistory", TransactionDetailsView.as_view()),
     path("externaluser/updateprofile/<int:pk>", UpdateUserDetailsView.as_view()),

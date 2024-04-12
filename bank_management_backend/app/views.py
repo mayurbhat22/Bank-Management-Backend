@@ -12,6 +12,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth import authenticate, login
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password, check_password
+from decimal import Decimal
 # Create your views here.
 
 class UserView(generics.ListCreateAPIView):
@@ -70,6 +71,17 @@ class LoginUserView(APIView):
                     refresh = RefreshToken.for_user(user)
                     access_token = refresh.access_token
 
+                    request.session['user_id'] = user.user_id
+                    request.session['user_name'] = user.user_name
+                    request.session['user_type'] = user.user_type
+                    request.session['user_role'] = user.user_role
+                    request.session['email'] = user.email
+                    request.session['name'] = user.name
+                    request.session['account_number'] = user.account.first().account_number
+                    request.session['account_type'] = user.account.first().account_type
+                    request.session['balance'] = str(user.account.first().balance)
+                    request.session.save()
+                    print("User_id", self.request.session.get('user_id'))
                     response_data = {
                         "message": "Login successful.",
                         "refresh": str(refresh),
@@ -111,6 +123,8 @@ class TransferMoneyView(APIView):
         from_account_number = request.data["from_account"]
         to_account_number = request.data["to_account"]
         from_account_pin = request.data["account_pin"]
+        isAuthoriseRequired = request.data["isAuthoriseRequired"]
+
         to_user_querySet = Account.objects.filter(account_number=to_account_number).first()
 
         to_user_id = 0
@@ -134,7 +148,7 @@ class TransferMoneyView(APIView):
 
         serializer = self.serializer_class(data={"from_user_id": from_user_id, "from_account_id": from_account_id, 
                                                  "to_account_id": to_account_id, "to_user_id": to_user_id, "from_account_number": from_account_number, 
-                                                 "to_account_number": to_account_number, "amount": amount, "transaction_type": "transfer"})
+                                                 "to_account_number": to_account_number, "amount": amount, "transaction_type": "transfer", "isAuthoriseRequired" : isAuthoriseRequired})
         if serializer.is_valid():
             # If validation passes, retrieve the user.
             print("Validated", serializer.validated_data)
@@ -143,11 +157,13 @@ class TransferMoneyView(APIView):
                 return Response({"message": "Insufficient balance"}, status=status.HTTP_400_BAD_REQUEST)
             serializer.save()
             # Update balance
-            from_account_querySet.balance = from_account_querySet.balance - int(amount)
-            from_account_querySet.save()
-            to_account_querySet.balance = to_account_querySet.balance + int(amount)
-            to_account_querySet.save()
-            print("Transaction saved")
+
+            if not isAuthoriseRequired:
+                from_account_querySet.balance = from_account_querySet.balance - int(amount)
+                from_account_querySet.save()
+                to_account_querySet.balance = to_account_querySet.balance + int(amount)
+                to_account_querySet.save()
+                print("Transaction saved")
             return Response({"message": "Transaction successful"}, status=status.HTTP_200_OK)
         else:
             print("Invalid dataaa", serializer.errors)
@@ -160,22 +176,35 @@ class TransactionDetailsView(generics.ListCreateAPIView):
 
     # Filter transaction related to from-user
     def list(self, request, *args, **kwargs):
-        from_user_id = request.query_params.get('from_user_id', None)
-        if from_user_id is not None:
-            queryset = TransactionDetails.objects.filter(from_user_id=from_user_id)
+        isSystemAdmin = request.query_params.get('isSystemAdmin', None)
+        if isSystemAdmin == "false":
+            from_user_id = request.query_params.get('user', None)
+            if from_user_id is not None:
+                queryset = TransactionDetails.objects.filter(from_user_id=from_user_id)
+                serializer = self.get_serializer(queryset, many=True)
+                data = []
+                for transaction in serializer.data:
+                    if not transaction["isAuthoriseRequired"]:
+                        data.append(transaction)
+                queryset = TransactionDetails.objects.filter(to_user_id=from_user_id)
+                serializer = self.get_serializer(queryset, many=True)
+                for transaction in serializer.data:
+                    if not transaction["isAuthoriseRequired"]:
+                        data.append(transaction)
+                return Response(data, status=status.HTTP_200_OK)
+            else:
+                queryset = self.get_queryset()
+                serializer = self.get_serializer(queryset, many=True)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            queryset = TransactionDetails.objects.all()
             serializer = self.get_serializer(queryset, many=True)
             data = []
             for transaction in serializer.data:
-                data.append(transaction)
-            queryset = TransactionDetails.objects.filter(to_user_id=from_user_id)
-            serializer = self.get_serializer(queryset, many=True)
-            for transaction in serializer.data:
-                data.append(transaction)
+                if transaction["isAuthoriseRequired"]:
+                    data.append(transaction)
             return Response(data, status=status.HTTP_200_OK)
-        else:
-            queryset = self.get_queryset()
-            serializer = self.get_serializer(queryset, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+        
 
 class UpdateUserDetailsView(generics.UpdateAPIView):
     queryset = User.objects.all()
@@ -189,6 +218,30 @@ class UpdateUserDetailsView(generics.UpdateAPIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# class UpdateUserDetailsView(generics.UpdateAPIView):
+#     serializer_class = UserSerializer
+
+#     def get_object(self):
+#         user_id = self.request.session.get('user_id')
+#         print("User_id", self.request.session.get('user_id'))
+#         try:
+#             user = User.objects.get(pk=user_id)
+#             return user
+#         except User.DoesNotExist:
+#             raise Http404
+
+#     def update(self, request, *args, **kwargs):
+
+#         print("User_iddd", request.session.get('user_id'))
+#         instance = self.get_object()
+#         print("Instance", instance)
+#         serializer = self.get_serializer(instance, data=request.data, partial=True)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response(serializer.data, status=status.HTTP_200_OK)
+#         else:
+#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
 class UpdateAccountPinView(generics.UpdateAPIView):
     serializer_class = UpdateAccountPinSerializer
@@ -198,7 +251,6 @@ class UpdateAccountPinView(generics.UpdateAPIView):
         try:
             return Account.objects.get(account_number=account_number)
         except Account.DoesNotExist:
-            # You can customize the response as needed
             raise Http404("No Account matches the given query.")
 
     def update(self, request, *args, **kwargs):
@@ -221,3 +273,35 @@ class GetAccountPinIsSetView(APIView):
         else:
             return Response({"message": "Account not found"}, status=status.HTTP_404_NOT_FOUND)
            
+class UpdateTransactionDetailsView(generics.UpdateAPIView):
+    queryset = TransactionDetails.objects.all()
+    serializer_class = TransferMoneySerializer
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+
+            from_account_number = request.data["from_account_number"]
+            to_account_number = request.data["to_account_number"]
+            amount = request.data["amount"]
+
+            from_account_querySet = Account.objects.filter(account_number=from_account_number).first()
+            from_account_id = 0
+            if from_account_querySet:
+                from_account_id = from_account_querySet.account_id
+
+            to_account_querySet = Account.objects.filter(account_number=to_account_number).first()
+            to_account_id = 0
+            if to_account_querySet:
+                to_account_id = to_account_querySet.account_id
+            
+            from_account_querySet.balance = from_account_querySet.balance - Decimal(amount)
+            from_account_querySet.save()
+            to_account_querySet.balance = to_account_querySet.balance + Decimal(amount)
+            to_account_querySet.save()
+            
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
