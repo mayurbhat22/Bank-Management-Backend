@@ -6,126 +6,161 @@ from rest_framework.views import APIView
 from rest_framework.decorators import api_view
 from django.shortcuts import get_object_or_404
 from django.http import Http404
-from .models import User, Account, TransactionDetails
-from .serializers import UserSerializer, CreateUserSerializer, LoginUserSerializer, UserLoginSerializer, CreateAccountSerializer, TransferMoneySerializer, UpdateAccountPinSerializer
+from .models import Account, TransactionDetails, UserProfile, AccountModel, TransactionDetailsModel
+from .serializers import UserSerializer, UserProfileSerializer, CreateUserSerializer, LoginUserSerializer, UserDetailsSerializer, UserLoginSerializer, CreateAccountSerializer, TransferMoneySerializer, UpdateAccountPinSerializer
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth import authenticate, login
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password, check_password
 from decimal import Decimal
+from django.contrib.auth.models import User
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
+from django.utils.decorators import method_decorator
+from django.contrib.auth import authenticate, login, logout
+from rest_framework import permissions
 # Create your views here.
 
-class UserView(generics.ListCreateAPIView):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer 
+@method_decorator(ensure_csrf_cookie, name='dispatch')
+class GetCSRFToken(APIView):
+    permission_classes = (permissions.AllowAny, )
+    def get(self, request, format=None):
+        return Response({ 'success': 'CSRF cookie set' })
+    
+@method_decorator(csrf_protect, name='dispatch')
+class LoginView(APIView):
+    permission_classes = (permissions.AllowAny, )
+    serializer_class = LoginUserSerializer
+    def post(self, request, format=None):
+        serializer = self.serializer_class(data=request.data)
+        data = self.request.data
+        password = data['password']
 
+        if serializer.is_valid():
+            username = serializer.validated_data['user_name']
+            user_type = serializer.validated_data['user_type']
+            user_role = serializer.validated_data['user_role']
+            try:
+                user = authenticate(request, username=username, password=password)
+                user_profile = UserProfile.objects.get(user=user)
+                if user_profile.user_type == user_type and user_profile.user_role == user_role:
+                    login(request, user)
+                    response_data = {
+                        "message": "Login successful.",
+                        "user_details": UserProfileSerializer(user_profile).data
+                    }
+                    return Response(response_data, status=status.HTTP_200_OK)
+                else:
+                    return Response({"detail": "Invalid username or password."}, status=status.HTTP_401_UNAUTHORIZED)
+            except:
+                return Response({ 'error': 'Something went wrong when logging in' })
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+@method_decorator(csrf_protect, name='dispatch') 
+class LogoutView(APIView):
+    def post(self, request, format=None):
+        try:
+            logout(request)
+            return Response({ 'success': 'Loggout Out' })
+        except:
+            return Response({ 'error': 'Something went wrong when logging out' })
+
+@method_decorator(csrf_protect, name='dispatch')       
 class CreateUserView(APIView):
-    print("CreateUserView")
+    permission_classes = (permissions.AllowAny, )
     serializer_create_class = CreateUserSerializer
     serializer_account_class = CreateAccountSerializer
     def post(self, request):
         print(request.data)
         serializer_create = self.serializer_create_class(data=request.data)
+        data = self.request.data
+        password = data['password']
         if serializer_create.is_valid():
-            print("Validated", serializer_create.validated_data)
-            user = User(
-                name=serializer_create.validated_data["name"],
+            user = User.objects.create_user(username=serializer_create.validated_data["user_name"], password=password)
+            user = User.objects.get(id=user.id)
+
+            user_profile = UserProfile.objects.create(user=user, name=serializer_create.validated_data["name"],
                 user_name=serializer_create.validated_data["user_name"],
                 email=serializer_create.validated_data["email"],
-                password=make_password(serializer_create.validated_data["password"]),
                 user_type=serializer_create.validated_data["user_type"],
-                user_role=serializer_create.validated_data["user_role"]
-            )
-            user.save()
-            print("User saved")
-            print("User_Data", UserSerializer(user).data)
-            serializer_account = self.serializer_account_class(data={"user": user.user_id, "account_type": "Savings", "balance": 100})
+                user_role=serializer_create.validated_data["user_role"])
+            
+            user_profile.save()
+            serializer_account = self.serializer_account_class(data={"user": user_profile.id, "account_type": "Savings", "balance": 100})
             if serializer_account.is_valid():
                 account = serializer_account.save()
-                print("Account saved")
-                print("Account_Data", CreateAccountSerializer(account).data)
             else:
-                print("Invalid Account data", serializer_account.errors)
                 return Response(status=status.HTTP_400_BAD_REQUEST, data={"data": serializer_account.errors})
             
-            return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+            return Response(UserProfileSerializer(user_profile).data, status=status.HTTP_201_CREATED)
         print("Invalid data", serializer_create.errors)
         return Response(status=status.HTTP_400_BAD_REQUEST, data={"data": serializer_create.errors})
-
-class LoginUserView(APIView):
-    serializer_class = LoginUserSerializer
-
-    def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data)
-        if serializer.is_valid():
-            username = serializer.validated_data['user_name']
-            password = serializer.validated_data['password']
-            user_type = serializer.validated_data['user_type']
-            user_role = serializer.validated_data['user_role']
-
-            try:
-                user = User.objects.get(user_name=username)
-                
-                if user and check_password(password, user.password) and user.user_type == user_type and user.user_role == user_role:
-                    refresh = RefreshToken.for_user(user)
-                    access_token = refresh.access_token
-
-                    request.session['user_id'] = user.user_id
-                    request.session['user_name'] = user.user_name
-                    request.session['user_type'] = user.user_type
-                    request.session['user_role'] = user.user_role
-                    request.session['email'] = user.email
-                    request.session['name'] = user.name
-                    request.session['account_number'] = user.account.first().account_number
-                    request.session['account_type'] = user.account.first().account_type
-                    request.session['balance'] = str(user.account.first().balance)
-                    request.session.save()
-                    print("User_id", self.request.session.get('user_id'))
-                    response_data = {
-                        "message": "Login successful.",
-                        "refresh": str(refresh),
-                        "access": str(access_token),
-                        "user_details": UserSerializer(user).data
-                    }
-                    return Response(response_data, status=status.HTTP_200_OK)
-                else:
-                    return Response({"detail": "Invalid username or password."}, status=status.HTTP_401_UNAUTHORIZED)
-            except User.DoesNotExist:
-                return Response({"detail": "Invalid username or password."}, status=status.HTTP_401_UNAUTHORIZED)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    
+@method_decorator(csrf_protect, name='dispatch')   
 class AccountView(generics.ListCreateAPIView):
-    queryset = User.objects.prefetch_related('account').all() 
-    serializer_class = UserSerializer
+    permission_classes = (permissions.AllowAny, )
+    def get(self, request, format=None):
+        try:
+            user = self.request.user
+            username = user.username
 
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+            user_profile = UserProfile.objects.get(user=user)
+            user_profile = UserProfileSerializer(user_profile)
 
+            return Response({ 'profile': user_profile.data, 'username': str(username) })
+        except:
+            return Response({ 'error': 'Something went wrong when retrieving profile' })
+
+@method_decorator(csrf_protect, name='dispatch')   
+class GetUsersView(generics.ListCreateAPIView):
+    permission_classes = (permissions.AllowAny, )
+    def get(self, request, format=None):
+        try:
+            user_profile = UserProfile.objects.all()
+            print("User Profile", user_profile)
+            user_profiles = UserProfileSerializer(user_profile, many=True)
+
+            return Response({ 'profile': user_profiles.data})
+        except:
+            return Response({ 'error': 'Something went wrong when retrieving profile' })
+    
 class DeleteUserView(generics.DestroyAPIView):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
+    queryset = User.objects.all()  
+    serializer_class = UserProfileSerializer  
+
+    def get_object(self):
+        user_profile_id = self.kwargs.get('pk')
+        user_profile = get_object_or_404(UserProfile, pk=user_profile_id)
+        return user_profile.user
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        self.perform_destroy(instance)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        try:
+            self.perform_destroy(instance)
+            return Response({'success': 'User deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response({'error': f'Something went wrong when trying to delete user: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+    
 
+@method_decorator(csrf_protect, name='dispatch') 
 class TransferMoneyView(APIView):
+    permission_classes = (permissions.AllowAny, )
     serializer_class = TransferMoneySerializer
 
     def post(self, request):
-        from_user_id = int(request.data["from_user"])
-        from_account_number = request.data["from_account"]
+        user = self.request.user
+
+        username = user.username
+        user_profile = UserProfile.objects.get(user=user)
+        account = AccountModel.objects.filter(user=user_profile).first()
+
+        from_user_id = user_profile.id
+        from_account_number = account.account_number
         to_account_number = request.data["to_account"]
         from_account_pin = request.data["account_pin"]
         isAuthoriseRequired = request.data["isAuthoriseRequired"]
 
-        to_user_querySet = Account.objects.filter(account_number=to_account_number).first()
+        to_user_querySet = AccountModel.objects.filter(account_number=to_account_number).first()
 
         to_user_id = 0
         if to_user_querySet:
@@ -133,14 +168,14 @@ class TransferMoneyView(APIView):
         if from_user_id == to_user_id:
             return Response({"message": "Cannot transfer funds to the same account"}, status=status.HTTP_400_BAD_REQUEST)
 
-        from_account_querySet = Account.objects.filter(account_number=from_account_number).first()
+        from_account_querySet = AccountModel.objects.filter(account_number=from_account_number).first()
         from_account_id = 0
         if from_account_querySet:
             from_account_id = from_account_querySet.account_id
             if from_account_querySet.account_pin != from_account_pin:
                 return Response({"message": "Invalid account pin"}, status=status.HTTP_400_BAD_REQUEST)
 
-        to_account_querySet = Account.objects.filter(account_number=to_account_number).first()
+        to_account_querySet = AccountModel.objects.filter(account_number=to_account_number).first()
         to_account_id = 0
         if to_account_querySet:
             to_account_id = to_account_querySet.account_id
@@ -150,43 +185,48 @@ class TransferMoneyView(APIView):
                                                  "to_account_id": to_account_id, "to_user_id": to_user_id, "from_account_number": from_account_number, 
                                                  "to_account_number": to_account_number, "amount": amount, "transaction_type": "transfer", "isAuthoriseRequired" : isAuthoriseRequired})
         if serializer.is_valid():
-            # If validation passes, retrieve the user.
-            print("Validated", serializer.validated_data)
-
             if from_account_querySet.balance < int(amount):
                 return Response({"message": "Insufficient balance"}, status=status.HTTP_400_BAD_REQUEST)
             serializer.save()
-            # Update balance
 
+            # Update balance
             if not isAuthoriseRequired:
                 from_account_querySet.balance = from_account_querySet.balance - int(amount)
                 from_account_querySet.save()
                 to_account_querySet.balance = to_account_querySet.balance + int(amount)
                 to_account_querySet.save()
-                print("Transaction saved")
             return Response({"message": "Transaction successful"}, status=status.HTTP_200_OK)
         else:
-            print("Invalid dataaa", serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         pass
 
+@method_decorator(csrf_protect, name='dispatch') 
 class TransactionDetailsView(generics.ListCreateAPIView):
+    permissions_classes = (permissions.AllowAny, )
     queryset = TransactionDetails.objects.all()
     serializer_class = TransferMoneySerializer
 
-    # Filter transaction related to from-user
     def list(self, request, *args, **kwargs):
-        isSystemAdmin = request.query_params.get('isSystemAdmin', None)
-        if isSystemAdmin == "false":
-            from_user_id = request.query_params.get('user', None)
+        user = self.request.user
+
+        username = user.username
+        user_profile = UserProfile.objects.get(user=user)
+        account = AccountModel.objects.filter(user=user_profile).first()
+        if user_profile.user_type == "Internal" and user_profile.user_role == "System Admin":
+            isSystemAdmin = True
+        else:
+            isSystemAdmin = False
+        if not isSystemAdmin:
+            
+            from_user_id = user_profile.id
             if from_user_id is not None:
-                queryset = TransactionDetails.objects.filter(from_user_id=from_user_id)
+                queryset = TransactionDetailsModel.objects.filter(from_user_id=from_user_id)
                 serializer = self.get_serializer(queryset, many=True)
                 data = []
                 for transaction in serializer.data:
                     if not transaction["isAuthoriseRequired"]:
                         data.append(transaction)
-                queryset = TransactionDetails.objects.filter(to_user_id=from_user_id)
+                queryset = TransactionDetailsModel.objects.filter(to_user_id=from_user_id)
                 serializer = self.get_serializer(queryset, many=True)
                 for transaction in serializer.data:
                     if not transaction["isAuthoriseRequired"]:
@@ -197,7 +237,7 @@ class TransactionDetailsView(generics.ListCreateAPIView):
                 serializer = self.get_serializer(queryset, many=True)
                 return Response(serializer.data, status=status.HTTP_200_OK)
         else:
-            queryset = TransactionDetails.objects.all()
+            queryset = TransactionDetailsModel.objects.all()
             serializer = self.get_serializer(queryset, many=True)
             data = []
             for transaction in serializer.data:
@@ -205,51 +245,39 @@ class TransactionDetailsView(generics.ListCreateAPIView):
                     data.append(transaction)
             return Response(data, status=status.HTTP_200_OK)
         
-
+@method_decorator(csrf_protect, name='dispatch') 
 class UpdateUserDetailsView(generics.UpdateAPIView):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
+    print("UpdateUserDetailsView")
+    permission_classes = (permissions.AllowAny,) 
+    serializer_class = UserSerializer  
+
+    def get_object(self):
+        return self.request.user
 
     def update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        user = self.get_object()
+        serializer = self.get_serializer(user, data=request.data, partial=True)
         if serializer.is_valid():
-            serializer.save()
+            updated_user = serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# class UpdateUserDetailsView(generics.UpdateAPIView):
-#     serializer_class = UserSerializer
-
-#     def get_object(self):
-#         user_id = self.request.session.get('user_id')
-#         print("User_id", self.request.session.get('user_id'))
-#         try:
-#             user = User.objects.get(pk=user_id)
-#             return user
-#         except User.DoesNotExist:
-#             raise Http404
-
-#     def update(self, request, *args, **kwargs):
-
-#         print("User_iddd", request.session.get('user_id'))
-#         instance = self.get_object()
-#         print("Instance", instance)
-#         serializer = self.get_serializer(instance, data=request.data, partial=True)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(serializer.data, status=status.HTTP_200_OK)
-#         else:
-#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+@method_decorator(csrf_protect, name='dispatch')    
 class UpdateAccountPinView(generics.UpdateAPIView):
+    permission_classes = (permissions.AllowAny, )
     serializer_class = UpdateAccountPinSerializer
 
     def get_object(self):
-        account_number = self.kwargs.get("account_number")
+        user = self.request.user
+
+        username = user.username
+        user_profile = UserProfile.objects.get(user=user)
+        account = AccountModel.objects.filter(user=user_profile).first()
+
+        account_number = account.account_number
         try:
-            return Account.objects.get(account_number=account_number)
+            return AccountModel.objects.get(account_number=account_number)
         except Account.DoesNotExist:
             raise Http404("No Account matches the given query.")
 
@@ -260,11 +288,15 @@ class UpdateAccountPinView(generics.UpdateAPIView):
             # Custom error handling for not found account
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         
-
-class GetAccountPinIsSetView(APIView):
+@method_decorator(csrf_protect, name='dispatch')
+class GetIsAccountPinSetView(APIView):
     def get(self, request, *args, **kwargs):
+        user = self.request.user
+        username = user.username
+        user_profile = UserProfile.objects.get(user=user)
+        account = AccountModel.objects.filter(user=user_profile).first()
+
         account_number = self.kwargs.get("account_number")
-        account = Account.objects.filter(account_number=account_number).first()
         if account:
             if account.account_pin == "0":
                 return Response({"message": "Account pin is not set"}, status=status.HTTP_200_OK)
@@ -272,9 +304,10 @@ class GetAccountPinIsSetView(APIView):
                 return Response({"message": "Account pin is set"}, status=status.HTTP_200_OK)
         else:
             return Response({"message": "Account not found"}, status=status.HTTP_404_NOT_FOUND)
-           
+
+@method_decorator(csrf_protect, name='dispatch')           
 class UpdateTransactionDetailsView(generics.UpdateAPIView):
-    queryset = TransactionDetails.objects.all()
+    queryset = TransactionDetailsModel.objects.all()
     serializer_class = TransferMoneySerializer
 
     def update(self, request, *args, **kwargs):
@@ -286,13 +319,12 @@ class UpdateTransactionDetailsView(generics.UpdateAPIView):
             from_account_number = request.data["from_account_number"]
             to_account_number = request.data["to_account_number"]
             amount = request.data["amount"]
-
-            from_account_querySet = Account.objects.filter(account_number=from_account_number).first()
+            from_account_querySet = AccountModel.objects.filter(account_number=from_account_number).first()
             from_account_id = 0
             if from_account_querySet:
                 from_account_id = from_account_querySet.account_id
 
-            to_account_querySet = Account.objects.filter(account_number=to_account_number).first()
+            to_account_querySet = AccountModel.objects.filter(account_number=to_account_number).first()
             to_account_id = 0
             if to_account_querySet:
                 to_account_id = to_account_querySet.account_id
@@ -305,3 +337,4 @@ class UpdateTransactionDetailsView(generics.UpdateAPIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
