@@ -42,40 +42,33 @@ INSTALLED_APPS = [
     'corsheaders',
 ]
 
-# REST_FRAMEWORK = {
-#     'DEFAULT_AUTHENTICATION_CLASSES': (
-#         'rest_framework.authentication.SessionAuthentication',
-#         'rest_framework.authentication.BasicAuthentication'
-#     ),
-# }
-
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ]
 }
+
 
 from datetime import timedelta
 
-# JWT settings
-SIMPLE_JWT = {
-    'USER_ID_FIELD': 'user_id',
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
-}
+# # JWT settings
+# SIMPLE_JWT = {
+#     'USER_ID_FIELD': 'user_id',
+#     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
+#     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+#     'ROTATE_REFRESH_TOKENS': True,
+#     'BLACKLIST_AFTER_ROTATION': True,
+# }
 
-AUTHENTICATION_BACKENDS = [
-    'app.backends.CustomUserAuthBackend',
-]
 
 MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
     'corsheaders.middleware.CorsMiddleware',  # added to solve CORS
     'django.middleware.common.CommonMiddleware',  # added to solve CORS
-    "django.middleware.common.CommonMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -116,7 +109,7 @@ WSGI_APPLICATION = "bank_management_backend.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": "bankmanagement",
+        "NAME": "bank_management",
         "HOST": 'localhost',
         "PORT": "3306",
         "USER": 'root',
@@ -168,7 +161,7 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+# SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Add the exact origin
@@ -177,4 +170,8 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ORIGIN_ALLOW_ALL = True # added to solve CORS
 
 CORS_ALLOW_CREDENTIALS = True # added to solve CORS
-
+CSRF_TRUSTED_ORIGINS = ["http://localhost:5173"]
+SESSION_COOKIE_SAMESITE = 'lax'
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = False
+SESSION_COOKIE_SECURE = False
