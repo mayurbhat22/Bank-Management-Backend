@@ -20,6 +20,21 @@ from django.contrib.auth import authenticate, login, logout
 from rest_framework import permissions
 # Create your views here.
 
+class CheckAuthenticatedView(APIView):
+    permission_classes = (permissions.AllowAny, )
+    def get(self, request, format=None):
+        user = self.request.user
+
+        try:
+            isAuthenticated = user.is_authenticated
+
+            if isAuthenticated:
+                return Response({ 'isAuthenticated': 'success' })
+            else:
+                return Response({ 'isAuthenticated': 'error' })
+        except:
+            return Response({ 'error': 'Something went wrong when checking authentication status' })
+        
 @method_decorator(ensure_csrf_cookie, name='dispatch')
 class GetCSRFToken(APIView):
     permission_classes = (permissions.AllowAny, )
